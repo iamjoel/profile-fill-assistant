@@ -1,0 +1,3 @@
+{
+  "extends": "@profile-fill-assistant/config/tsconfig.base.json"
+}
