@@ -7,7 +7,7 @@ Guidance for coding agents working in this repository.
 - Use `pnpm` for dependency installation and workspace scripts.
 - Ask for confirmation before adding new production dependencies.
 - Prefer targeted changes that fit the current local-first desktop architecture.
-- When designing or implementing pages/UI, follow the guidance in `design.md` at the repo root.
+- When designing or implementing pages/UI, follow the guidance in `./design.md`.
 
 ## Project Overview
 
