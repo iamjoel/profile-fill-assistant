@@ -16,18 +16,6 @@
     "dev": {
       "cache": false,
       "persistent": true
-    },
-    "db:push": {
-      "cache": false
-    },
-    "db:generate": {
-      "cache": false
-    },
-    "deploy": {
-      "cache": false
-    },
-    "destroy": {
-      "cache": false
     }
   }
 }

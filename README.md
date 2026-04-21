@@ -1,105 +1,113 @@
 # profile-fill-assistant
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, TanStack Router, Hono, TRPC, and more.
+`profile-fill-assistant` is now a local-first desktop app built with Tauri v2. The UI runs as a React + Vite app, while persistence is handled by Rust commands that write directly to a local SQLite database. There is no Cloudflare Workers runtime, no D1, and no cloud deployment path in the current architecture.
 
-## Features
+## Tech Stack
 
-- **TypeScript** - For type safety and improved developer experience
-- **TanStack Router** - File-based routing with full type safety
-- **TailwindCSS** - Utility-first CSS for rapid UI development
-- **Shared UI package** - shadcn/ui primitives live in `packages/ui`
-- **Hono** - Lightweight, performant server framework
-- **tRPC** - End-to-end type-safe APIs
-- **workers** - Runtime environment
-- **Drizzle** - TypeScript-first ORM
-- **SQLite/Turso** - Database engine
-- **Turborepo** - Optimized monorepo build system
+- `Tauri v2` for the desktop shell and native command bridge
+- `React 19` + `TanStack Router` for the frontend
+- `Vite` for local frontend development and builds
+- `Rust` + `rusqlite` for local SQLite access
+- `pnpm` workspaces for package management
+- shared UI primitives in `packages/ui`
+
+## Repo Layout
+
+- `apps/web`: the desktop app frontend and package scripts
+- `apps/web/src-tauri`: the Tauri Rust backend, config, and capabilities
+- `packages/ui`: shared components and global styles
+- `packages/config`: shared TypeScript config
+
+## How It Works
+
+1. `pnpm dev` starts the Tauri app.
+2. Tauri launches the Vite dev server defined in `apps/web/src-tauri/tauri.conf.json`.
+3. The React frontend calls Rust commands through `@tauri-apps/api`.
+4. Rust reads and writes the local SQLite database in the app data directory.
+
+If you run the frontend without Tauri, it falls back to `localStorage` so the UI can still be previewed in a browser.
+
+## Prerequisites
+
+Before running the app, install:
+
+1. Node.js
+2. `pnpm`
+3. Rust toolchain (`rustup`, `cargo`, `rustc`)
+4. Tauri OS prerequisites for your platform:
+   https://v2.tauri.app/start/prerequisites/
+
+If `cargo` is missing, `pnpm dev` and `pnpm build` will fail because Tauri cannot compile the Rust sidecar.
 
 ## Getting Started
 
-First, install the dependencies:
+Install dependencies:
 
 ```bash
 pnpm install
 ```
 
-## Database Setup
-
-This project uses SQLite with Drizzle ORM.
-
-1. Start the local SQLite database (optional):
-   D1 local development and migrations are handled automatically by Alchemy during dev and deploy.
-
-2. Update your `.env` file in the `apps/server` directory with the appropriate connection details if needed.
-
-3. Apply the schema to your database:
+Start the desktop app in development mode:
 
 ```bash
-pnpm run db:push
+pnpm dev
 ```
 
-Then, run the development server:
+Start only the browser frontend preview:
 
 ```bash
-pnpm run dev
+pnpm dev:web
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser to see the web application.
-The API is running at [http://localhost:3000](http://localhost:3000).
-
-## UI Customization
-
-React web apps in this stack share shadcn/ui primitives through `packages/ui`.
-
-- Change design tokens and global styles in `packages/ui/src/styles/globals.css`
-- Update shared primitives in `packages/ui/src/components/*`
-- Adjust shadcn aliases or style config in `packages/ui/components.json` and `apps/web/components.json`
-
-### Add more shared components
-
-Run this from the project root to add more primitives to the shared UI package:
+Run type checks:
 
 ```bash
-npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
+pnpm check-types
 ```
 
-Import shared components like this:
+## Build
 
-```tsx
-import { Button } from "@profile-fill-assistant/ui/components/button";
+Build the desktop application:
+
+```bash
+pnpm build
 ```
 
-### Add app-specific blocks
+Build only the web assets:
 
-If you want to add app-specific blocks instead of shared primitives, run the shadcn CLI from `apps/web`.
-
-## Deployment (Cloudflare via Alchemy)
-
-- Dev: pnpm run dev
-- Deploy: pnpm run deploy
-- Destroy: pnpm run destroy
-
-For more details, see the guide on [Deploying to Cloudflare with Alchemy](https://www.better-t-stack.dev/docs/guides/cloudflare-alchemy).
-
-## Project Structure
-
-```
-profile-fill-assistant/
-├── apps/
-│   ├── web/         # Frontend application (React + TanStack Router)
-│   └── server/      # Backend API (Hono, TRPC)
-├── packages/
-│   ├── ui/          # Shared shadcn/ui components and styles
-│   ├── api/         # API layer / business logic
-│   └── db/          # Database schema & queries
+```bash
+pnpm build:web
 ```
 
-## Available Scripts
+Preview the built web assets without Tauri:
 
-- `pnpm run dev`: Start all applications in development mode
-- `pnpm run build`: Build all applications
-- `pnpm run dev:web`: Start only the web application
-- `pnpm run dev:server`: Start only the server
-- `pnpm run check-types`: Check TypeScript types across all apps
-- `pnpm run db:push`: Push schema changes to database
-- `pnpm run db:generate`: Generate database client/types
+```bash
+pnpm serve:web
+```
+
+## Local Data Storage
+
+The desktop runtime creates a SQLite database named `profile-fill-assistant.sqlite3` under the Tauri app data directory for the current OS.
+
+Typical locations look like this:
+
+- macOS: `~/Library/Application Support/app.profile-fill-assistant/profile-fill-assistant.sqlite3`
+- Windows: `%AppData%/app.profile-fill-assistant/profile-fill-assistant.sqlite3`
+- Linux: `~/.local/share/app.profile-fill-assistant/profile-fill-assistant.sqlite3`
+
+The exact path is resolved by Tauri at runtime and is also shown in the app UI.
+
+## Scripts
+
+- `pnpm dev`: start the Tauri desktop app
+- `pnpm dev:web`: start the Vite-only frontend preview
+- `pnpm build`: build the Tauri desktop app
+- `pnpm build:web`: build the Vite frontend only
+- `pnpm serve:web`: preview the built web frontend
+- `pnpm check-types`: run workspace type checks
+
+## Notes
+
+- The old Cloudflare/Workers/D1/Alchemy stack has been removed.
+- There is no server deployment step anymore.
+- New persistence-related work should be implemented in `apps/web/src-tauri/src/lib.rs`.

@@ -7,24 +7,14 @@
   ],
   "type": "module",
   "scripts": {
-    "dev": "turbo dev",
-    "build": "turbo build",
+    "dev": "pnpm --filter web dev",
+    "dev:web": "pnpm --filter web dev:web",
+    "build": "pnpm --filter web build",
+    "build:web": "pnpm --filter web build:web",
     "check-types": "turbo check-types",
-    "dev:web": "turbo -F web dev",
-    "dev:server": "turbo -F server dev",
-    "db:push": "turbo -F @profile-fill-assistant/db db:push",
-    "db:generate": "turbo -F @profile-fill-assistant/db db:generate",
-    "deploy": "turbo -F @profile-fill-assistant/infra deploy",
-    "destroy": "turbo -F @profile-fill-assistant/infra destroy"
-  },
-  "dependencies": {
-    "@profile-fill-assistant/env": "workspace:*",
-    "dotenv": "catalog:",
-    "zod": "catalog:"
+    "serve:web": "pnpm --filter web serve"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:",
-    "@profile-fill-assistant/config": "workspace:*",
     "@types/node": "catalog:",
     "turbo": "^2.8.12",
     "typescript": "catalog:"
