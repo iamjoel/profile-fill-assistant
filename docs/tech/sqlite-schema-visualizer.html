@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SQLite Schema Visualizer</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: oklch(0.98 0.01 95);
+        --panel: oklch(0.995 0.003 95);
+        --panel-strong: oklch(0.96 0.02 82);
+        --line: oklch(0.83 0.03 80);
+        --text: oklch(0.28 0.02 60);
+        --muted: oklch(0.5 0.02 65);
+        --ingest: oklch(0.72 0.14 55);
+        --profile: oklch(0.63 0.11 150);
+        --session: oklch(0.61 0.11 245);
+        --shadow: 0 20px 50px color-mix(in oklab, var(--text) 12%, transparent);
+        --radius: 26px;
+        --grid-gap: clamp(18px, 2vw, 28px);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, oklch(0.95 0.04 65), transparent 30%),
+          radial-gradient(circle at top right, oklch(0.94 0.04 235), transparent 32%),
+          linear-gradient(180deg, oklch(0.985 0.01 92), var(--bg));
+      }
+
+      .page {
+        width: min(1440px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: clamp(24px, 4vw, 52px) 0 48px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 18px;
+        margin-bottom: 28px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        width: fit-content;
+        padding: 7px 12px;
+        border: 1px solid color-mix(in oklab, var(--line) 72%, white);
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--panel) 92%, white);
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        max-width: 14ch;
+        font-family: "Iowan Old Style", "Palatino Linotype", serif;
+        font-size: clamp(2.8rem, 5vw, 5.4rem);
+        line-height: 0.92;
+        letter-spacing: -0.04em;
+      }
+
+      .intro {
+        max-width: 74ch;
+        color: var(--muted);
+        font-size: clamp(1rem, 1.3vw, 1.08rem);
+        line-height: 1.7;
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .summary-card {
+        padding: 18px 18px 16px;
+        border: 1px solid color-mix(in oklab, var(--line) 80%, white);
+        border-radius: 20px;
+        background: color-mix(in oklab, var(--panel) 94%, white);
+        box-shadow: var(--shadow);
+      }
+
+      .summary-card strong {
+        display: block;
+        margin-bottom: 6px;
+        font-family: "Iowan Old Style", "Palatino Linotype", serif;
+        font-size: 2rem;
+        font-weight: 600;
+        line-height: 1;
+      }
+
+      .summary-card span {
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+
+      .canvas-shell {
+        position: relative;
+        margin-top: 26px;
+        padding: clamp(18px, 2vw, 28px);
+        border: 1px solid color-mix(in oklab, var(--line) 76%, white);
+        border-radius: 32px;
+        background:
+          linear-gradient(180deg, color-mix(in oklab, var(--panel) 96%, white), color-mix(in oklab, var(--panel-strong) 70%, white));
+        box-shadow: var(--shadow);
+        overflow: clip;
+      }
+
+      .canvas-shell::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(color-mix(in oklab, var(--line) 22%, transparent) 1px, transparent 1px),
+          linear-gradient(90deg, color-mix(in oklab, var(--line) 22%, transparent) 1px, transparent 1px);
+        background-size: 28px 28px;
+        opacity: 0.55;
+        pointer-events: none;
+      }
+
+      .legend {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--panel) 94%, white);
+        border: 1px solid color-mix(in oklab, var(--line) 84%, white);
+        font-size: 0.86rem;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+      }
+
+      .dot.ingest { background: var(--ingest); }
+      .dot.profile { background: var(--profile); }
+      .dot.session { background: var(--session); }
+
+      .layout {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--grid-gap);
+        align-items: start;
+      }
+
+      .lane {
+        display: grid;
+        gap: 16px;
+      }
+
+      .lane-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 4px;
+      }
+
+      .lane-title h2 {
+        margin: 0;
+        font-size: 1rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .lane-title span {
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .table-card {
+        position: relative;
+        padding: 18px 18px 16px;
+        border-radius: var(--radius);
+        border: 1px solid color-mix(in oklab, var(--line) 84%, white);
+        background: color-mix(in oklab, var(--panel) 92%, white);
+        box-shadow: var(--shadow);
+      }
+
+      .table-card::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 4px;
+        border-radius: var(--radius) 0 0 var(--radius);
+        background: var(--accent);
+      }
+
+      .table-card[data-group="ingest"] { --accent: var(--ingest); }
+      .table-card[data-group="profile"] { --accent: var(--profile); }
+      .table-card[data-group="session"] { --accent: var(--session); }
+
+      .table-head {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      .table-name {
+        margin: 0 0 6px;
+        font-size: 1.08rem;
+      }
+
+      .table-role {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.88rem;
+        line-height: 1.55;
+      }
+
+      .pill {
+        flex: none;
+        padding: 8px 10px;
+        border-radius: 14px;
+        font-size: 0.78rem;
+        background: color-mix(in oklab, var(--accent) 12%, white);
+        color: color-mix(in oklab, var(--accent) 65%, var(--text));
+      }
+
+      .field-list {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .field-list li {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 10px;
+        align-items: start;
+        padding: 8px 0;
+        border-top: 1px solid color-mix(in oklab, var(--line) 55%, white);
+        font-size: 0.92rem;
+      }
+
+      .field-list li:first-child {
+        border-top: 0;
+        padding-top: 0;
+      }
+
+      .field-kind {
+        padding: 3px 7px;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        line-height: 1;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        background: color-mix(in oklab, var(--text) 7%, white);
+        color: var(--muted);
+      }
+
+      .field-kind.pk {
+        background: color-mix(in oklab, var(--ingest) 18%, white);
+        color: color-mix(in oklab, var(--ingest) 72%, var(--text));
+      }
+
+      .field-kind.fk {
+        background: color-mix(in oklab, var(--session) 18%, white);
+        color: color-mix(in oklab, var(--session) 74%, var(--text));
+      }
+
+      .field-name {
+        font-weight: 600;
+      }
+
+      .field-note {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      .connection-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+      }
+
+      .relation-list {
+        display: grid;
+        gap: 12px;
+        margin-top: 22px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .relation-item {
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: color-mix(in oklab, var(--panel) 95%, white);
+        border: 1px solid color-mix(in oklab, var(--line) 74%, white);
+      }
+
+      .relation-item strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 0.95rem;
+      }
+
+      .relation-item span {
+        color: var(--muted);
+        font-size: 0.86rem;
+        line-height: 1.55;
+      }
+
+      .footer-note {
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      @media (max-width: 1080px) {
+        .summary,
+        .layout,
+        .relation-list {
+          grid-template-columns: 1fr;
+        }
+
+        .connection-layer {
+          display: none;
+        }
+
+        .canvas-shell::before {
+          opacity: 0.3;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <span class="eyebrow">docs / tech / html schema map</span>
+        <h1>SQLite 表设计可视化</h1>
+        <p class="intro">
+          这页把 `profile-fill-assistant` 的核心 SQLite 表拆成 3 个工作域：扫描输入、按人聚合、待填文件会话。
+          桌面端会直接把关联线叠在表卡片之间，便于快速看清主键、外键和 1:1 / 1:N 关系。
+        </p>
+      </section>
+
+      <section class="summary" aria-label="概览统计">
+        <article class="summary-card">
+          <strong>9</strong>
+          <span>核心表</span>
+        </article>
+        <article class="summary-card">
+          <strong>9</strong>
+          <span>已标出的主关联</span>
+        </article>
+        <article class="summary-card">
+          <strong>3</strong>
+          <span>领域分组</span>
+        </article>
+        <article class="summary-card">
+          <strong>2</strong>
+          <span>关系类型：1:1 / 1:N</span>
+        </article>
+      </section>
+
+      <section class="canvas-shell" id="schemaCanvas">
+        <div class="legend" aria-label="图例">
+          <span class="tag"><span class="dot ingest"></span>扫描与来源链路</span>
+          <span class="tag"><span class="dot profile"></span>按人聚合与字段结果</span>
+          <span class="tag"><span class="dot session"></span>待填文件会话</span>
+          <span class="tag">实线 = 1:N</span>
+          <span class="tag">虚线 = 1:1</span>
+        </div>
+
+        <svg class="connection-layer" id="connectionLayer" aria-hidden="true"></svg>
+
+        <div class="layout" id="layoutRoot">
+          <section class="lane">
+            <div class="lane-title">
+              <h2>Ingest</h2>
+              <span>扫描任务与原始文件</span>
+            </div>
+
+            <article class="table-card" data-group="ingest" data-table="scan_jobs">
+              <div class="table-head">
+                <div>
+                  <h3 class="table-name">scan_jobs</h3>
+                  <p class="table-role">记录每次全量或增量扫描任务的元信息。</p>
+                </div>
+                <span class="pill">任务主表</span>
+              </div>
+              <ul class="field-list">
+                <li><span class="field-kind pk">PK</span><span><span class="field-name">scan_job_id</span><span class="field-note">任务主键</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">root_path</span><span class="field-note">扫描根目录</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">scan_mode</span><span class="field-note">full / incremental</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">status</span><span class="field-note">running / success / failed</span></span></li>
+              </ul>
+            </article>
+
+            <article class="table-card" data-group="ingest" data-table="source_records">
+              <div class="table-head">
+                <div>
+                  <h3 class="table-name">source_records</h3>
+                  <p class="table-role">文件级主表，记录扫描、解析和抽取状态。</p>
+                </div>
+                <span class="pill">来源主表</span>
+              </div>
+              <ul class="field-list">
+                <li><span class="field-kind pk">PK</span><span><span class="field-name">source_id</span><span class="field-note">来源主键</span></span></li>
+                <li><span class="field-kind fk">FK</span><span><span class="field-name">scan_job_id</span><span class="field-note">关联 scan_jobs</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">file_path</span><span class="field-note">原始文件绝对路径</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">extract_status</span><span class="field-note">success / failed / skipped</span></span></li>
+              </ul>
+            </article>
+
+            <article class="table-card" data-group="ingest" data-table="conversion_records">
+              <div class="table-head">
+                <div>
+                  <h3 class="table-name">conversion_records</h3>
+                  <p class="table-role">记录 `doc -> docx` 转换映射。</p>
+                </div>
+                <span class="pill">转换映射</span>
+              </div>
+              <ul class="field-list">
+                <li><span class="field-kind pk">PK</span><span><span class="field-name">conversion_id</span><span class="field-note">转换主键</span></span></li>
+                <li><span class="field-kind fk">FK</span><span><span class="field-name">source_id</span><span class="field-note">关联 source_records</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">source_doc_path</span><span class="field-note">原始 doc 路径</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">converted_docx_path</span><span class="field-note">转换后 docx 路径</span></span></li>
+              </ul>
+            </article>
+          </section>
+
+          <section class="lane">
+            <div class="lane-title">
+              <h2>Profiles</h2>
+              <span>按人聚合、字段结果、冲突摘要</span>
+            </div>
+
+            <article class="table-card" data-group="profile" data-table="person_profiles">
+              <div class="table-head">
+                <div>
+                  <h3 class="table-name">person_profiles</h3>
+                  <p class="table-role">按人聚合后的主实体，服务人员列表与工作台。</p>
+                </div>
+                <span class="pill">人员主表</span>
+              </div>
+              <ul class="field-list">
+                <li><span class="field-kind pk">PK</span><span><span class="field-name">person_id</span><span class="field-note">人员主键</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">display_name</span><span class="field-note">默认展示姓名</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">identity_keys_json</span><span class="field-note">证件号、手机号、邮箱等身份线索</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">conflict_count</span><span class="field-note">当前冲突字段数</span></span></li>
+              </ul>
+            </article>
+
+            <article class="table-card" data-group="profile" data-table="field_entries">
+              <div class="table-head">
+                <div>
+                  <h3 class="table-name">field_entries</h3>
+                  <p class="table-role">当前最终字段结果，供资料概览和默认摘要使用。</p>
+                </div>
+                <span class="pill">字段当前值</span>
+              </div>
+              <ul class="field-list">
+                <li><span class="field-kind pk">PK</span><span><span class="field-name">field_entry_id</span><span class="field-note">字段记录主键</span></span></li>
+                <li><span class="field-kind fk">FK</span><span><span class="field-name">person_id</span><span class="field-note">关联 person_profiles</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">field_key</span><span class="field-note">字段名，例如 phone</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">canonical_value</span><span class="field-note">当前最终值</span></span></li>
+              </ul>
+            </article>
+
+            <article class="table-card" data-group="profile" data-table="field_candidates">
+              <div class="table-head">
+                <div>
+                  <h3 class="table-name">field_candidates</h3>
+                  <p class="table-role">字段候选值明细，用于冲突核对和来源追溯。</p>
+                </div>
+                <span class="pill">候选明细</span>
+              </div>
+              <ul class="field-list">
+                <li><span class="field-kind pk">PK</span><span><span class="field-name">candidate_id</span><span class="field-note">候选值主键</span></span></li>
+                <li><span class="field-kind fk">FK</span><span><span class="field-name">field_entry_id</span><span class="field-note">关联 field_entries</span></span></li>
+                <li><span class="field-kind fk">FK</span><span><span class="field-name">source_id</span><span class="field-note">关联 source_records</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">candidate_value</span><span class="field-note">候选字段值</span></span></li>
+              </ul>
+            </article>
+
+            <article class="table-card" data-group="profile" data-table="conflict_records">
+              <div class="table-head">
+                <div>
+                  <h3 class="table-name">conflict_records</h3>
+                  <p class="table-role">人员级和字段级冲突摘要，便于快速筛选和处理。</p>
+                </div>
+                <span class="pill">冲突摘要</span>
+              </div>
+              <ul class="field-list">
+                <li><span class="field-kind pk">PK</span><span><span class="field-name">conflict_id</span><span class="field-note">冲突主键</span></span></li>
+                <li><span class="field-kind fk">FK</span><span><span class="field-name">person_id</span><span class="field-note">关联 person_profiles</span></span></li>
+                <li><span class="field-kind fk">FK</span><span><span class="field-name">field_entry_id</span><span class="field-note">关联 field_entries</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">resolution_status</span><span class="field-note">open / resolved / ignored</span></span></li>
+              </ul>
+            </article>
+          </section>
+
+          <section class="lane">
+            <div class="lane-title">
+              <h2>Sessions</h2>
+              <span>待填文件上下文与候选人匹配</span>
+            </div>
+
+            <article class="table-card" data-group="session" data-table="form_sessions">
+              <div class="table-head">
+                <div>
+                  <h3 class="table-name">form_sessions</h3>
+                  <p class="table-role">记录一次待填文件打开会话和上下文快照。</p>
+                </div>
+                <span class="pill">会话主表</span>
+              </div>
+              <ul class="field-list">
+                <li><span class="field-kind pk">PK</span><span><span class="field-name">session_id</span><span class="field-note">会话主键</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">opened_file_path</span><span class="field-note">当前打开文件路径</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">context_entities_json</span><span class="field-note">从文件中识别出的上下文</span></span></li>
+                <li><span class="field-kind fk">FK</span><span><span class="field-name">matched_person_id</span><span class="field-note">默认匹配人员，可为空</span></span></li>
+              </ul>
+            </article>
+
+            <article class="table-card" data-group="session" data-table="form_session_candidates">
+              <div class="table-head">
+                <div>
+                  <h3 class="table-name">form_session_candidates</h3>
+                  <p class="table-role">保存某次会话下的候选人排序结果。</p>
+                </div>
+                <span class="pill">匹配结果</span>
+              </div>
+              <ul class="field-list">
+                <li><span class="field-kind pk">PK</span><span><span class="field-name">session_candidate_id</span><span class="field-note">候选记录主键</span></span></li>
+                <li><span class="field-kind fk">FK</span><span><span class="field-name">session_id</span><span class="field-note">关联 form_sessions</span></span></li>
+                <li><span class="field-kind fk">FK</span><span><span class="field-name">person_id</span><span class="field-note">关联 person_profiles</span></span></li>
+                <li><span class="field-kind">COL</span><span><span class="field-name">match_score</span><span class="field-note">候选匹配得分</span></span></li>
+              </ul>
+            </article>
+          </section>
+        </div>
+
+        <section class="relation-list" aria-labelledby="relationHeading">
+          <h2 class="sr-only" id="relationHeading">关系清单</h2>
+          <article class="relation-item">
+            <strong>scan_jobs → source_records</strong>
+            <span>`scan_jobs.scan_job_id` 通过 `source_records.scan_job_id` 建立 1:N 关系。</span>
+          </article>
+          <article class="relation-item">
+            <strong>source_records → conversion_records</strong>
+            <span>`source_records.source_id` 对应 `conversion_records.source_id`，关系是 1:1。</span>
+          </article>
+          <article class="relation-item">
+            <strong>person_profiles → field_entries</strong>
+            <span>一个人拥有多个当前字段结果，因此是 1:N。</span>
+          </article>
+          <article class="relation-item">
+            <strong>field_entries → field_candidates</strong>
+            <span>每个字段条目可以对应多个候选值，关系是 1:N。</span>
+          </article>
+          <article class="relation-item">
+            <strong>source_records → field_candidates</strong>
+            <span>候选值保留来源文件，因此 `source_id` 指回 `source_records`。</span>
+          </article>
+          <article class="relation-item">
+            <strong>person_profiles → conflict_records</strong>
+            <span>一个人可以存在多个冲突摘要，关系是 1:N。</span>
+          </article>
+          <article class="relation-item">
+            <strong>field_entries → conflict_records</strong>
+            <span>每个冲突记录也会落到具体字段条目上，关系是 1:N。</span>
+          </article>
+          <article class="relation-item">
+            <strong>form_sessions → form_session_candidates</strong>
+            <span>一个待填文件会话会产出多个候选人排序结果，关系是 1:N。</span>
+          </article>
+          <article class="relation-item">
+            <strong>person_profiles → form_session_candidates</strong>
+            <span>候选人记录里的 `person_id` 指向人员主表，形成多对一反向视角。</span>
+          </article>
+        </section>
+
+        <p class="footer-note">
+          注：`form_sessions.matched_person_id` 也会指向 `person_profiles.person_id`，但由于它是“当前默认匹配”而不是候选列表主链路，这里以辅助关系处理。
+        </p>
+      </section>
+    </main>
+
+    <script>
+      const color = (name) =>
+        getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+      const relations = [
+        { from: "scan_jobs", to: "source_records", type: "1:N", color: color("--ingest") },
+        { from: "source_records", to: "conversion_records", type: "1:1", color: color("--ingest") },
+        { from: "person_profiles", to: "field_entries", type: "1:N", color: color("--profile") },
+        { from: "field_entries", to: "field_candidates", type: "1:N", color: color("--profile") },
+        { from: "source_records", to: "field_candidates", type: "1:N", color: color("--ingest") },
+        { from: "person_profiles", to: "conflict_records", type: "1:N", color: color("--profile") },
+        { from: "field_entries", to: "conflict_records", type: "1:N", color: color("--profile") },
+        { from: "form_sessions", to: "form_session_candidates", type: "1:N", color: color("--session") },
+        { from: "person_profiles", to: "form_session_candidates", type: "1:N", color: color("--session") },
+        { from: "person_profiles", to: "form_sessions", type: "1:N", color: color("--session"), subtle: true }
+      ];
+
+      const root = document.getElementById("schemaCanvas");
+      const svg = document.getElementById("connectionLayer");
+
+      function pointFor(rect, side, rootRect) {
+        if (side === "left") {
+          return { x: rect.left - rootRect.left, y: rect.top - rootRect.top + rect.height / 2 };
+        }
+        if (side === "right") {
+          return { x: rect.right - rootRect.left, y: rect.top - rootRect.top + rect.height / 2 };
+        }
+        return { x: rect.left - rootRect.left + rect.width / 2, y: rect.bottom - rootRect.top };
+      }
+
+      function buildPath(start, end) {
+        const spread = Math.max(40, Math.abs(end.x - start.x) * 0.45);
+        const c1x = start.x + spread;
+        const c2x = end.x - spread;
+        return `M ${start.x} ${start.y} C ${c1x} ${start.y}, ${c2x} ${end.y}, ${end.x} ${end.y}`;
+      }
+
+      function relationSides(fromRect, toRect) {
+        if (toRect.left >= fromRect.right) {
+          return ["right", "left"];
+        }
+        if (fromRect.left >= toRect.right) {
+          return ["left", "right"];
+        }
+        return ["bottom", "bottom"];
+      }
+
+      function renderConnections() {
+        if (window.innerWidth <= 1080) {
+          svg.innerHTML = "";
+          return;
+        }
+
+        const rootRect = root.getBoundingClientRect();
+        svg.setAttribute("viewBox", `0 0 ${rootRect.width} ${rootRect.height}`);
+        svg.setAttribute("width", rootRect.width);
+        svg.setAttribute("height", rootRect.height);
+        svg.innerHTML = "";
+
+        relations.forEach((relation) => {
+          const fromEl = root.querySelector(`[data-table="${relation.from}"]`);
+          const toEl = root.querySelector(`[data-table="${relation.to}"]`);
+
+          if (!fromEl || !toEl) return;
+
+          const fromRect = fromEl.getBoundingClientRect();
+          const toRect = toEl.getBoundingClientRect();
+          const [fromSide, toSide] = relationSides(fromRect, toRect);
+          const start = pointFor(fromRect, fromSide, rootRect);
+          const end = pointFor(toRect, toSide, rootRect);
+
+          const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("d", buildPath(start, end));
+          path.setAttribute("fill", "none");
+          path.setAttribute("stroke", relation.color);
+          path.setAttribute("stroke-width", relation.subtle ? "1.7" : "2.4");
+          path.setAttribute("stroke-linecap", "round");
+          path.setAttribute("opacity", relation.subtle ? "0.55" : "0.9");
+          if (relation.type === "1:1") {
+            path.setAttribute("stroke-dasharray", "7 8");
+          }
+
+          const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          const midX = (start.x + end.x) / 2;
+          const midY = (start.y + end.y) / 2 - 8;
+          label.setAttribute("x", String(midX));
+          label.setAttribute("y", String(midY));
+          label.setAttribute("text-anchor", "middle");
+          label.setAttribute("font-size", "11");
+          label.setAttribute("font-family", "Avenir Next, Segoe UI, sans-serif");
+          label.setAttribute("fill", color("--muted"));
+          label.textContent = relation.type;
+
+          group.append(path, label);
+          svg.appendChild(group);
+        });
+      }
+
+      window.addEventListener("load", renderConnections);
+      window.addEventListener("resize", renderConnections);
+    </script>
+  </body>
+</html>
